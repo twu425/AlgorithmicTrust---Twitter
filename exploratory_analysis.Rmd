@@ -1,0 +1,155 @@
+---
+title: "exploratory_analysis.rmd"
+author: "Sam Malik"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "Exploratory Fairness Analysis"
+author: "Sam Malik"
+output: html_notebook
+---
+
+# Purpose
+
+This notebook starts the initial exploratory analysis for our Community Notes audit. The goal is to investigate whether the algorithm treats partisan groups equally by looking at helpfulness ratings, political factor values, and intercept scores.
+
+# Load Packages
+
+```{r}
+library(tidyverse)
+library(arrow)
+```
+
+# Import Data
+
+```{r}
+full_data <- read_parquet("data/full_project_dataset.parquet")
+unique_notes <- read_parquet("data/unique_notes_summary.parquet")
+ratings_may <- read_parquet("data/ratings-20240501-20240531.parquet")
+```
+
+# Inspect Data
+
+```{r}
+glimpse(full_data)
+glimpse(unique_notes)
+glimpse(ratings_may)
+
+colnames(full_data)
+colnames(unique_notes)
+colnames(ratings_may)
+```
+
+## Clean Analysis Dataset
+
+```{r}
+analysis_df <- full_data %>%
+  filter(
+    !is.na(noteFinalFactor.notes),
+    !is.na(noteFinalIntercept.notes),
+    !is.na(noteFinalRatingStatus.notes),
+    party != "unknown"
+  )
+
+glimpse(analysis_df)
+```
+
+## Political Factor Distribution
+
+```{r}
+ggplot(analysis_df,
+       aes(x = noteFinalFactor.notes,
+           fill = noteFinalRatingStatus.notes)) +
+  geom_histogram(bins = 40, alpha = 0.7) +
+  labs(
+    title = "Political Factor Distribution by Final Note Status",
+    x = "Political Factor",
+    y = "Count",
+    fill = "Final Status"
+  ) +
+  theme_minimal()
+```
+
+## Intercept Scores and Helpfulness
+
+```{r}
+ggplot(analysis_df,
+       aes(x = noteFinalIntercept.notes,
+           fill = noteFinalRatingStatus.notes)) +
+  geom_density(alpha = 0.4) +
+  labs(
+    title = "Intercept Scores by Final Note Status",
+    x = "Note Final Intercept",
+    y = "Density",
+    fill = "Final Status"
+  ) +
+  theme_minimal()
+```
+
+## Helpfulness Outcomes by Party
+
+```{r}
+party_summary <- analysis_df %>%
+  group_by(party, noteFinalRatingStatus.notes) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(party_summary,
+       aes(x = party,
+           y = count,
+           fill = noteFinalRatingStatus.notes)) +
+  geom_col(position = "fill") +
+  labs(
+    title = "Final Note Status by Political Party",
+    x = "Political Party",
+    y = "Proportion",
+    fill = "Final Status"
+  ) +
+  theme_minimal()
+```
+## Average Intercept Score by Final Status
+
+```{r}
+analysis_df %>%
+  group_by(noteFinalRatingStatus.notes) %>%
+  summarise(
+    average_intercept = mean(noteFinalIntercept.notes, na.rm = TRUE),
+    average_factor = mean(noteFinalFactor.notes, na.rm = TRUE),
+    count = n()
+  )
+```
+
+
+## Intercept Distribution Boxplot
+
+```{r}
+ggplot(analysis_df,
+       aes(x = noteFinalRatingStatus.notes,
+           y = noteFinalIntercept.notes,
+           fill = noteFinalRatingStatus.notes)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Intercept Scores Across Final Note Statuses",
+    x = "Final Status",
+    y = "Intercept Score"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 15, hjust = 1)
+  )
+```
+
+## Initial Findings
+
+The exploratory analysis suggests that the Community Notes matrix factorization system may prioritize notes that achieve broader bipartisan agreement. In the political factor distribution graph, notes with factor values closer to zero appear more likely to receive “CURRENTLY_RATED_HELPFUL” outcomes, while more politically extreme notes are more commonly categorized as “NEEDS_MORE_RATINGS.” This aligns with Twitter’s stated goal of elevating notes that are viewed as credible across ideological groups rather than by a single partisan audience.
+
+The intercept analysis provides even stronger evidence of this pattern. Notes classified as “CURRENTLY_RATED_HELPFUL” tend to have substantially higher intercept scores than notes categorized as “CURRENTLY_RATED_NOT_HELPFUL.” Since intercept values are intended to measure agreement that is independent of politics, this suggests that the algorithm heavily rewards notes with cross-partisan consensus.
+
+The summary statistics further reinforce this relationship. Notes classified as “CURRENTLY_RATED_HELPFUL” had an average intercept score of approximately 0.455, compared to 0.131 for notes needing more ratings and -0.101 for notes rated not helpful. This suggests that intercept score may be one of the strongest predictors of whether a note becomes publicly displayed by the algorithm.
+
+The comparison between Democratic and Republican-associated notes showed relatively similar proportions of final outcomes between the two groups. At the exploratory level, this may indicate that the algorithm is not strongly favoring one partisan group over another. However, additional statistical testing would be necessary to determine whether these differences are statistically significant and whether other variables, such as topic category or user engagement, influence note outcomes.
