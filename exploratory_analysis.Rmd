@@ -153,3 +153,66 @@ The intercept analysis provides even stronger evidence of this pattern. Notes cl
 The summary statistics further reinforce this relationship. Notes classified as “CURRENTLY_RATED_HELPFUL” had an average intercept score of approximately 0.455, compared to 0.131 for notes needing more ratings and -0.101 for notes rated not helpful. This suggests that intercept score may be one of the strongest predictors of whether a note becomes publicly displayed by the algorithm.
 
 The comparison between Democratic and Republican-associated notes showed relatively similar proportions of final outcomes between the two groups. At the exploratory level, this may indicate that the algorithm is not strongly favoring one partisan group over another. However, additional statistical testing would be necessary to determine whether these differences are statistically significant and whether other variables, such as topic category or user engagement, influence note outcomes.
+
+
+
+## Analysis 5/23 - Further analysis into differences into relationship between political rating and helpfulness rating of final notes
+
+Drop all final notes that need more ratings. Compare proportions.
+
+```{r}
+party_summary_filtered <- analysis_df %>%
+  filter(noteFinalRatingStatus.notes != "NEEDS_MORE_RATINGS") %>% # Ignore Needs More Ratings Notes
+  group_by(party, noteFinalRatingStatus.notes) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(party_summary_filtered,
+       aes(x = party,
+           y = count,
+           fill = noteFinalRatingStatus.notes)) +
+  geom_col(position = "fill") +
+  labs(
+    title = "Final Notes Status - Only notes with sufficient ratings - by Political Party",
+    x = "Political Party",
+    y = "Proportion",
+    fill = "Final Status"
+  ) +
+  theme_minimal()
+```
+The difference in not_helpful proportions is hard to see. Hide helpful ratings and zoom in on the chart.
+Here it is revealed that republican rated final notes are twice as likely to be rated unhelpful as democratic rated final notes.
+
+```{r}
+party_summary_filtered_proportional <- analysis_df %>%
+  filter(noteFinalRatingStatus.notes != "NEEDS_MORE_RATINGS") %>% # Ignore Needs More Ratings Notes
+  count(party, noteFinalRatingStatus.notes) %>%
+  group_by(party) %>%
+  mutate(prop = n / sum(n)) %>%
+  filter(noteFinalRatingStatus.notes != "CURRENTLY_RATED_HELPFUL") # Drop helpful ratings (implied by unhelpful proportion)
+
+ggplot(party_summary_filtered_proportional, aes(x = party, y = prop, fill = party)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c(
+    "democrat" = "#2E74C0",
+    "republican" = "#D64550"
+  )) +
+  labs(
+    title = "Proportion of Final Notes rated unhelpful by Party",
+    x = "Party",
+    y = "Proportion"
+  ) +
+
+  theme_minimal()
+
+```
+
+Looking at the raw data this chart was constructed from, however, reveals that the actual quantity of notes rated "unhelpful" is too small for this to be significant. 
+
+``` {r}
+party_summary_filtered_proportional <- analysis_df %>%
+  count(party, noteFinalRatingStatus.notes) %>%
+  group_by(party) %>%
+  mutate(prop = n / sum(n))
+
+party_summary_filtered_proportional
+```
